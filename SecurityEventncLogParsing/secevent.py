@@ -1,10 +1,12 @@
+# Import Library
+
 import json
 import re
 from datetime import datetime
 
 # Lokasi file log input dan output
-LOG_INPUT = "/var/www/html/nextcloud/data/nextcloud.log"
-LOG_OUTPUT = "/var/log/nextcloud/security_events.json"
+LOG_INPUT = "/path/lokasi/inputfile.log"
+LOG_OUTPUT = "/path/lokasi/outputfile.log"
 
 # List untuk menyimpan entri hasil parsing
 log_entries = []
