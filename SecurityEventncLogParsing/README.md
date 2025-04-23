@@ -8,18 +8,19 @@
    
    ![image](https://github.com/user-attachments/assets/1af20dfc-842a-44ea-9759-d166e5553008)
 
-   A. Minute
+   A. Minute:
    Menit saat command akan dijalankan, antara 0 sampai 59.
    
-   B. Hour
+   B. Hour:
    Jam saat command akan dijalankan, dengan rentang 0-23 (format waktu 24 jam).
    
    C. Day of the month
    Hari dalam suatu bulan yang diinginkan user untuk menjalankan command, dengan rentang 1-31.
    
-   D. Month
+   D. Month:
    Bulan yang user inginkan untuk menjalankan command, dengan rentang 1-12 untuk Januari sampai Desember.
-   E. Day of the week
+
+   E. Day of the week:
    Hari dalam satu minggu saat perintah akan dijalankan, dengan rentang 0-6 yang mewakili Minggu sampai Sabtu.
    Dalam beberapa sistem, value 7 mewakili hari Minggu.
    
