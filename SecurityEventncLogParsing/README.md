@@ -1,7 +1,7 @@
-Untuk menjadwalkan script agar jalan otomatis:
-# Masuk Ke Cron
+# Untuk menjadwalkan script agar jalan otomatis:
+## Masuk Ke Cron
    crontab -e
-# Tambahkan baris agar di jalankan per-5 menit
+## Tambahkan baris agar di jalankan per-5 menit
    */5 * * * * python3 /usr/local/bin/filter_virus_failedlogin_json.py
    
    Interval bisa diubah dengan mengikuti standar
