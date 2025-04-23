@@ -1,64 +1,71 @@
-# Import Library
-
 import json
 import re
 from datetime import datetime
 
-# Lokasi file log input dan output
-LOG_INPUT = "/path/lokasi/inputfile.log"
-LOG_OUTPUT = "/path/lokasi/outputfile.log"
+LOG_INPUT = "/var/log/nextcloud/nextcloud.log"
+LOG_OUTPUT = "/var/log/nextcloud/security_events.json"
 
-# List untuk menyimpan entri hasil parsing
-log_entries = []
+# Regex untuk deteksi virus
+virus_pattern = re.compile(
+    r'"remoteAddr":"(?P<ip>[^"]+)".*?"user":"(?P<user>[^"]+)".*?"app":"(?P<app>[^"]+)".*?"method":"(?P<method>[^"]+)".*?"url":"(?P<url>[^"]+)".*?"message":"(?P<message>Virus [^"]+?)".*?"exception":.*?"Message":"(?P<virus>Virus [^"]+?)".*?"class":"(?P<modul>OCA\\\\Files_Antivirus.*?)"',
+    re.DOTALL
+)
 
-# Regex untuk menangkap dua jenis event
-antivirus_regex = re.compile(r'Virus (?P<virus>[\w\.\-]+) is detected')
-failed_login_regex = re.compile(r'Login failed: (?P<user>\w+) \(Remote IP: (?P<ip>[\d\.]+)\)')
+# Regex untuk login gagal
+login_fail_pattern = re.compile(
+    r'"remoteAddr":"(?P<ip>[^"]+)".*?"user":false.*?"message":"Login failed: (?P<user>[^ ]+) \(Remote IP: (?P=ip)\)"',
+    re.DOTALL
+)
 
-# Membaca dan parsing log
-with open(LOG_INPUT, "r") as log_file:
-    for line in log_file:
-        try:
-            log = json.loads(line)
-            entry = {
-                "time": datetime.strptime(log["time"], "%Y-%m-%dT%H:%M:%S+00:00").strftime("%B %d, %Y %H:%M:%S"),
-                "reqId": log.get("reqId"),
-                "remoteAddr": log.get("remoteAddr"),
-                "userAgent": log.get("userAgent"),
-                "version": log.get("version"),
-                "method": log.get("method"),
-                "url": log.get("url"),
-            }
+def parse_log_entry(line):
+    # Coba parse line ke dict JSON
+    try:
+        return json.loads(line)
+    except json.JSONDecodeError:
+        return None
 
-            # Deteksi virus
-            if "Virus" in log.get("message", ""):
-                match = antivirus_regex.search(log["message"])
-                if match:
-                    entry.update({
-                        "event": "virus_detected",
-                        "virus": match.group("virus"),
-                        "user": log.get("user"),
-                        "message": log["message"],
-                        "app": "files_antivirus"
-                    })
-                    log_entries.append(entry)
+def extract_security_events():
+    events = []
+    with open(LOG_INPUT, "r") as infile:
+        for line in infile:
+            log_entry = parse_log_entry(line)
+            if not log_entry:
+                continue
+            log_str = json.dumps(log_entry)
 
-            # Gagal login
-            elif "Login failed:" in log.get("message", ""):
-                match = failed_login_regex.search(log["message"])
-                if match:
-                    entry.update({
-                        "event": "login_failed",
-                        "user": match.group("user"),
-                        "app": "authentication",
-                        "message": log["message"]
-                    })
-                    log_entries.append(entry)
-        except json.JSONDecodeError:
-            continue  # Lewati baris yang tidak valid JSON
+            # Match virus detection
+            virus_match = virus_pattern.search(log_str)
+            if virus_match:
+                events.append({
+                    "event": "virus_detected",
+                    "ip": virus_match.group("ip"),
+                    "user": virus_match.group("user"),
+                    "app": virus_match.group("app"),
+                    "method": virus_match.group("method"),
+                    "file": virus_match.group("url"),
+                    "virus": virus_match.group("virus"),
+                    "message": virus_match.group("message"),
+                    "module": virus_match.group("modul"),
+                    "timestamp": log_entry.get("time", datetime.utcnow().isoformat())
+                })
 
-# Simpan ke file JSON
-with open(LOG_OUTPUT, "a") as out:
-    json.dump(log_entries, out, indent=2)
+            # Match login failure
+            login_match = login_fail_pattern.search(log_str)
+            if login_match:
+                events.append({
+                    "event": "login_failed",
+                    "ip": login_match.group("ip"),
+                    "user": login_match.group("user"),
+                    "message": log_entry.get("message", ""),
+                    "timestamp": log_entry.get("time", datetime.utcnow().isoformat())
+                })
 
-print(f"[+] Security events berhasil disimpan di {LOG_OUTPUT}")
+    return events
+
+if __name__ == "__main__":
+    found_events = extract_security_events()
+
+    # Simpan dalam format JSON Lines (append mode)
+    with open(LOG_OUTPUT, "a") as outfile:
+        for event in found_events:
+            outfile.write(json.dumps(event) + "\n")
