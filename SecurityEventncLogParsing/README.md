@@ -1,4 +1,4 @@
-#Untuk menjadwalkan script agar jalan otomatis:
+# Untuk menjadwalkan script agar jalan otomatis:
 1. Masuk Ke Cron
    crontab -e
 2. Tambahkan baris agar di jalankan per-5 menit
