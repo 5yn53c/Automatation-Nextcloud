@@ -58,7 +58,7 @@ with open(LOG_INPUT, "r") as log_file:
             continue  # Lewati baris yang tidak valid JSON
 
 # Simpan ke file JSON
-with open(LOG_OUTPUT, "w") as out:
+with open(LOG_OUTPUT, "a") as out:
     json.dump(log_entries, out, indent=2)
 
 print(f"[+] Security events berhasil disimpan di {LOG_OUTPUT}")
