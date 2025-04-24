@@ -30,4 +30,18 @@
    Value 37 dan 17 di atas mewakili pukul 17.37. Dua tanda bintang untuk value Day of the month dan Month mewakili value apa pun yang           memungkinkan. Artinya, tugas tersebut akan diulang pada semua tanggal dan semua bulan. Terakhir, value 5 mewakili hari Jumat.
    Deretan   angka tersebut kemudian diikuti oleh lokasi tugas.
 
+## Send Log To SIEM
+   Buat file /etc/rsyslog.d/sec_event.conf
+
+   module(load="imfile")
+
+   input(type="imfile"
+         File="/var/log/nextcloud/security_events.log"
+         Tag="security_event:"
+         Severity="info"
+         Facility="local1")
+
+   # Kirim langsung ke SIEM via TCP (ganti IP & port sesuai SIEM kamu)
+   local1.*                        @@192.168.100.10:514
+
 
