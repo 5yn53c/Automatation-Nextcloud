@@ -1,71 +1,83 @@
 import json
+import os
 import re
 from datetime import datetime
 
-LOG_INPUT = "/var/log/nextcloud/nextcloud.log"
-LOG_OUTPUT = "/var/log/nextcloud/security_events.json"
+LOG_INPUT = "/var/www/html/nextcloud/data/nextcloud.log"
+LOG_OUTPUT = "/var/log/nextcloud/security_events.log"
 
-# Regex untuk deteksi virus
-virus_pattern = re.compile(
-    r'"remoteAddr":"(?P<ip>[^"]+)".*?"user":"(?P<user>[^"]+)".*?"app":"(?P<app>[^"]+)".*?"method":"(?P<method>[^"]+)".*?"url":"(?P<url>[^"]+)".*?"message":"(?P<message>Virus [^"]+?)".*?"exception":.*?"Message":"(?P<virus>Virus [^"]+?)".*?"class":"(?P<modul>OCA\\\\Files_Antivirus.*?)"',
-    re.DOTALL
-)
+# Regex patterns
+antivirus_regex = re.compile(r'Virus (?P<virus>[\w\.\-]+) is detected')
+failed_login_regex = re.compile(r'Login failed: (?P<user>\w+) \(Remote IP: (?P<ip>[\d\.]+)\)')
 
-# Regex untuk login gagal
-login_fail_pattern = re.compile(
-    r'"remoteAddr":"(?P<ip>[^"]+)".*?"user":false.*?"message":"Login failed: (?P<user>[^ ]+) \(Remote IP: (?P=ip)\)"',
-    re.DOTALL
-)
-
-def parse_log_entry(line):
-    # Coba parse line ke dict JSON
-    try:
-        return json.loads(line)
-    except json.JSONDecodeError:
-        return None
-
-def extract_security_events():
-    events = []
-    with open(LOG_INPUT, "r") as infile:
-        for line in infile:
-            log_entry = parse_log_entry(line)
-            if not log_entry:
+# Load reqIds from output log
+existing_ids = set()
+if os.path.exists(LOG_OUTPUT):
+    with open(LOG_OUTPUT, "r") as f:
+        for line in f:
+            try:
+                log_entry = json.loads(line.strip())
+                if "reqId" in log_entry:
+                    existing_ids.add(log_entry["reqId"])
+            except json.JSONDecodeError:
                 continue
-            log_str = json.dumps(log_entry)
 
-            # Match virus detection
-            virus_match = virus_pattern.search(log_str)
-            if virus_match:
-                events.append({
-                    "event": "virus_detected",
-                    "ip": virus_match.group("ip"),
-                    "user": virus_match.group("user"),
-                    "app": virus_match.group("app"),
-                    "method": virus_match.group("method"),
-                    "file": virus_match.group("url"),
-                    "virus": virus_match.group("virus"),
-                    "message": virus_match.group("message"),
-                    "module": virus_match.group("modul"),
-                    "timestamp": log_entry.get("time", datetime.utcnow().isoformat())
+# Process input log
+new_logs = []
+with open(LOG_INPUT, "r") as f:
+    for line in f:
+        try:
+            log = json.loads(line)
+            req_id = log.get("reqId")
+            if not req_id or req_id in existing_ids:
+                continue  # Skip logs with existing reqId
+
+            time_obj = datetime.strptime(log["time"], "%Y-%m-%dT%H:%M:%S+00:00")
+            formatted_time = time_obj.strftime("%B %d, %Y %H:%M:%S")
+
+            message = log.get("message", "")
+            base_entry = {
+                "reqId": req_id,
+                "time": formatted_time,
+                "remoteAddr": log.get("remoteAddr"),
+                "user": log.get("user"),
+                "method": log.get("method"),
+                "url": log.get("url"),
+                "userAgent": log.get("userAgent"),
+                "version": log.get("version"),
+                "originalMessage": message
+            }
+
+            # Cek malware
+            match_virus = antivirus_regex.search(message)
+            if match_virus:
+                base_entry.update({
+                    "type": "virus_detected",
+                    "app": "files_antivirus",
+                    "virus": match_virus.group("virus"),
+                    "message": message
                 })
+                new_logs.append(base_entry)
+                existing_ids.add(req_id)  # Tambahkan reqId ke existing_ids
+                continue
 
-            # Match login failure
-            login_match = login_fail_pattern.search(log_str)
-            if login_match:
-                events.append({
-                    "event": "login_failed",
-                    "ip": login_match.group("ip"),
-                    "user": login_match.group("user"),
-                    "message": log_entry.get("message", ""),
-                    "timestamp": log_entry.get("time", datetime.utcnow().isoformat())
+            # Cek gagal login
+            match_login = failed_login_regex.search(message)
+            if match_login:
+                base_entry.update({
+                    "type": "failed_login",
+                    "app": "authentication",
+                    "username": match_login.group("user"),
+                    "message": message
                 })
+                new_logs.append(base_entry)
+                existing_ids.add(req_id)  # Tambahkan reqId ke existing_ids
 
-    return events
+        except json.JSONDecodeError:
+            continue
 
-if __name__ == "__main__":
-    found_events = extract_security_events()
-
-    # Simpan dalam format JSON Lines (append mode)
-    with open(LOG_OUTPUT, "a") as outfile:
-        for event in found_events:
-            outfile.write(json.dumps(event) + "\n")
+# Append hanya yang unik
+if new_logs:
+    with open(LOG_OUTPUT, "a") as f:
+        for entry in new_logs:
+            f.write(json.dumps(entry) + "\n")
