@@ -31,7 +31,7 @@
    Deretan   angka tersebut kemudian diikuti oleh lokasi tugas.
 
 ## Send Log To SIEM
-   Buat file /etc/rsyslog.d/sec_event.conf
+   Buat file /etc/rsyslog.d/sec_event.conf dengan config kaya dibawah
 
    module(load="imfile")
 
@@ -43,5 +43,7 @@
 
    # Kirim langsung ke SIEM via TCP (ganti IP & port sesuai SIEM kamu)
    local1.*                        @@192.168.100.10:514
+   
+   Restart syslog: sudo systemctl restart rsyslog
 
 
