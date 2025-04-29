@@ -8,7 +8,9 @@ LOG_OUTPUT = "/var/log/nextcloud/security_events.log"
 LAST_TIME_FILE = "/var/log/nextcloud/last_time.txt"
 
 # Regex patterns
-antivirus_regex = re.compile(r'Virus (?P<virus>[\w\.\-]+) is detected')
+antivirus_and_upload_regex = re.compile(
+    r'Virus (?P<virus>[\w\.\-]+) is detected|Upload cannot be completed: (?P<file>[\w\.\-]+)'
+)
 infected_deleted_regex = re.compile(r'Infected file deleted\.')
 failed_login_regex = re.compile(r'Login failed: (?P<user>[\w\-]+) \(Remote IP: (?P<ip>[\d\.]+)\)')
 
@@ -59,15 +61,23 @@ with open(LOG_INPUT, "r") as f:
                 "originalMessage": message
             }
 
-            # Cek virus detected
-            match_virus = antivirus_regex.search(message)
-            if match_virus:
-                base_entry.update({
-                    "type": "virus_detected",
-                    "app": "files_antivirus",
-                    "virus": match_virus.group("virus"),
-                    "message": message
-                })
+            # Cek jika ada Virus Detected atau Upload Gagal
+            match = antivirus_and_upload_regex.search(message)
+            if match:
+                if match.group("virus"):
+                    base_entry.update({
+                        "type": "virus_detected",
+                        "app": "files_antivirus",
+                        "virus": match.group("virus"),
+                        "message": message
+                    })
+                elif match.group("file"):
+                    base_entry.update({
+                        "type": "upload_failed",
+                        "app": "files",
+                        "file": match.group("file"),
+                        "message": message
+                    })
                 new_logs.append(base_entry)
                 existing_ids.add(req_id)
                 continue
