@@ -4,7 +4,7 @@
 ## Add Cron Script
    */5 * * * * python3 /usr/bin/python3 /path/to/file.py
    
-   Interval bisa diubah dengan mengikuti standar
+   The interval can be changed by following the standards.
 
 ## Send Log To SIEM
    Create File On /etc/rsyslog.d/ and add config bellow
