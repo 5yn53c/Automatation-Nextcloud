@@ -1,40 +1,43 @@
 import json
 import os
 import re
-from datetime import datetime
 
 LOG_INPUT = "/var/www/html/nextcloud/data/nextcloud.log"
 LOG_OUTPUT = "/var/log/nextcloud/security_events.log"
+LAST_TIME_FILE = "/var/log/nextcloud/.lasttime"  # untuk nyimpen waktu terakhir
 
 # Regex patterns
 antivirus_regex = re.compile(r'Virus (?P<virus>[\w\.\-]+) is detected')
 failed_login_regex = re.compile(r'Login failed: (?P<user>\w+) \(Remote IP: (?P<ip>[\d\.]+)\)')
 
-# Load reqIds from output log
-existing_ids = set()
-if os.path.exists(LOG_OUTPUT):
-    with open(LOG_OUTPUT, "r") as f:
-        for line in f:
-            try:
-                log_entry = json.loads(line.strip())
-                if "reqId" in log_entry:
-                    existing_ids.add(log_entry["reqId"])
-            except json.JSONDecodeError:
-                continue
+# Load last processed time
+if os.path.exists(LAST_TIME_FILE):
+    with open(LAST_TIME_FILE, "r") as f:
+        last_time = f.read().strip()
+else:
+    last_time = None
 
-# Process input log
+new_last_time = last_time  # Default, supaya kalau nggak ada update tetap aman
+
+# Process logs
 new_logs = []
 with open(LOG_INPUT, "r") as f:
     for line in f:
         try:
             log = json.loads(line)
+            log_time = log.get("time")
+
+            if not log_time:
+                continue
+
+            # Langsung pakai time tanpa parsing
+            formatted_time = log_time
+
+            # Lewatkan log yang sudah diproses
+            if last_time and log_time <= last_time:
+                continue
+
             req_id = log.get("reqId")
-            if not req_id or req_id in existing_ids:
-                continue  # Skip logs with existing reqId
-
-            time_obj = datetime.strptime(log["time"], "%Y-%m-%dT%H:%M:%S+00:00")
-            formatted_time = time_obj.strftime("%B %d, %Y %H:%M:%S")
-
             message = log.get("message", "")
             base_entry = {
                 "reqId": req_id,
@@ -48,7 +51,7 @@ with open(LOG_INPUT, "r") as f:
                 "originalMessage": message
             }
 
-            # Cek malware
+            # Deteksi virus
             match_virus = antivirus_regex.search(message)
             if match_virus:
                 base_entry.update({
@@ -58,10 +61,10 @@ with open(LOG_INPUT, "r") as f:
                     "message": message
                 })
                 new_logs.append(base_entry)
-                existing_ids.add(req_id)  # Tambahkan reqId ke existing_ids
+                new_last_time = log_time
                 continue
 
-            # Cek gagal login
+            # Deteksi failed login
             match_login = failed_login_regex.search(message)
             if match_login:
                 base_entry.update({
@@ -71,13 +74,18 @@ with open(LOG_INPUT, "r") as f:
                     "message": message
                 })
                 new_logs.append(base_entry)
-                existing_ids.add(req_id)  # Tambahkan reqId ke existing_ids
+                new_last_time = log_time
 
         except json.JSONDecodeError:
             continue
 
-# Append hanya yang unik
+# Write new logs
 if new_logs:
+    os.makedirs(os.path.dirname(LOG_OUTPUT), exist_ok=True)
     with open(LOG_OUTPUT, "a") as f:
         for entry in new_logs:
             f.write(json.dumps(entry) + "\n")
+
+    # Update last time
+    with open(LAST_TIME_FILE, "w") as f:
+        f.write(new_last_time)
