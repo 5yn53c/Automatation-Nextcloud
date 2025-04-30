@@ -1,12 +1,15 @@
 # Automation Script
-## Change to Cron Mode
-   crontab -e
-## Add Cron Script
+This script aims to send nextcloud.log to SIEM, however, not all logs but only information about failed logins and information about which files are infected with malware based on AV detection in Nextcloud.
+
+## Step Implementation
+### Create File and add code
+   touch example.py
+### Add Cron Script
    */5 * * * * python3 /usr/bin/python3 /path/to/file.py
    
    The interval can be changed by following the standards.
 
-## Send Log To SIEM
+### Send Log To SIEM
    Create File On /etc/rsyslog.d/ and add config bellow
 
    module(load="imfile")
